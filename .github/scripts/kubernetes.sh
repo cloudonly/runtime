@@ -58,7 +58,8 @@ if [[ -n "$SEALOS_PATCH" ]]; then
   rmdir "$PATCH"
   sudo docker run --rm -v "/usr/bin:/pwd" --entrypoint /bin/sh ghcr.io/labring/sealos:latest -c "cp -a /usr/bin/sealos /pwd"
   sudo cp -au "$(sudo buildah mount "$(sudo buildah from "$SEALOS_PATCH-$ARCH")")" "$PATCH"
-  tree "$PATCH"
+  sudo chown -R "$(whoami)" "$PATCH"
+  tree "$PATCH" || true
   sudo cp -au "$PATCH"/* .
 else
   sudo docker run --rm -v "/usr/bin:/pwd" --entrypoint /bin/sh "$IMAGE_CACHE_NAME:sealos-v$SEALOS-amd64" -c "cp -a /sealos/sealos /pwd"
