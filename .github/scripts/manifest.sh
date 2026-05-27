@@ -13,6 +13,7 @@ readonly IMAGE_HUB_USERNAME=${username?}
 readonly IMAGE_HUB_PASSWORD=${password?}
 
 readonly IMAGE_TAG=${version?}
+readonly DOCKER_REGISTRY_TOKEN="${1:-}"
 readonly KUBE_RAW="${IMAGE_TAG%%-*}"
 readonly KUBE="${KUBE_RAW#v}"
 readonly KUBE_XY="${KUBE%.*}"
@@ -67,7 +68,7 @@ for IMAGE_NAME in "${IMAGE_PUSH_NAME[@]}"; do
   done | xargs sudo buildah manifest create --all "$manifest_name" || exit $ERR_CODE
   if [[ $(sudo buildah inspect "$manifest_name" | yq .manifests[].platform.architecture | uniq | grep 64 -c) -eq 2 ]]; then
     sudo buildah manifest push --all "$manifest_name" "docker://$IMAGE_NAME" && echo "$IMAGE_NAME push success"
-    if sudo buildah login -u labring -p "$1" docker.io; then
+    if [[ -n "$DOCKER_REGISTRY_TOKEN" ]] && sudo buildah login -u labring -p "$DOCKER_REGISTRY_TOKEN" docker.io; then
       docker_image_name="docker.io/labring/${IMAGE_NAME##*/}"
       sudo buildah manifest push --rm --all "$manifest_name" "docker://$docker_image_name" && echo "$docker_image_name push success"
     else
