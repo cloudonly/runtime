@@ -14,6 +14,8 @@ fi
 readonly SEALOS=${sealoslatest?}
 readonly SEALOS_XYZ="${SEALOS%%-*}"
 
+source .github/scripts/versions/lib.sh
+
 case $CRI_TYPE in
 containerd)
   IMAGE_KUBE=kubernetes
@@ -34,7 +36,7 @@ fi
 echo "Resolving versions in $(pwd)"
 rm -rf .versions
 mkdir -p .versions
-for file in "$(pwd)"/.github/versions/${part:-*}/CHANGELOG*; do
+while IFS= read -r file; do
   K8S_MD=${file##*/}
   case $CRI_TYPE in
   containerd | docker)
@@ -93,7 +95,7 @@ for file in "$(pwd)"/.github/versions/${part:-*}/CHANGELOG*; do
     cut -dv -f 2 ".versions/$K8S_MD" |
       awk '{printf "{\"version\":\"%s\",\"arch\":\"amd64\"},{\"version\":\"%s\",\"arch\":\"arm64\"},",$1,$1}' >>.versions/versions_arch.txt
   fi
-done
+done < <(resolve_version_files "$(pwd)" "${part:-}" "${kubeMinor:-}")
 SET_MATRIX=$(cat .versions/versions_arch.txt)
 echo "{\"include\":[${SET_MATRIX%?}]}" | yq -P
 echo "matrix={\"include\":[${SET_MATRIX%?}]}" >>"$GITHUB_OUTPUT"

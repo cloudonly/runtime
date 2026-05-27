@@ -5,6 +5,9 @@ on:
       sealosPatch:
         description: 'sealos patch image for development.eg.ghcr.io/labring/sealos-patch:latest'
         required: false
+      kubeMinor:
+        description: 'specific kubernetes minor version.eg.1.34'
+        required: false
       part:
         description: 'exec part.0,1,2,3,4,5,6'
         required: true
@@ -19,6 +22,7 @@ env:
   registry: ghcr.io
   repo: ${{ github.repository }}
   sealosPatch: ${{ github.event.inputs.sealosPatch }}
+  kubeMinor: ${{ github.event.inputs.kubeMinor }}
   criType: containerd
 jobs:
   resolve-issue-sealoslatest:
