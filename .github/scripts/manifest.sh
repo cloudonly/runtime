@@ -11,7 +11,6 @@ readonly IMAGE_HUB_REGISTRY=${registry?}
 readonly IMAGE_HUB_REPO=${repo?}
 readonly IMAGE_HUB_USERNAME=${username?}
 readonly IMAGE_HUB_PASSWORD=${password?}
-readonly IMAGE_CACHE_NAME="ghcr.io/labring-actions/cache"
 
 readonly IMAGE_TAG=${version?}
 readonly KUBE_RAW="${IMAGE_TAG%%-*}"
@@ -24,52 +23,6 @@ fi
 readonly sealoslatest="${sealoslatest:-${IMAGE_TAG#*-}}"
 readonly SEALOS=${sealoslatest?}
 readonly SEALOS_PATCH="${sealosPatch:-}"
-readonly SEALOS_XYZ="${SEALOS%%-*}"
-if [[ "${SEALOS_XYZ//./}" -le 433 ]] && [[ $KUBE_TYPE == k3s ]] && [[ -z "$SEALOS_PATCH" ]]; then
-  echo "INFO::skip $KUBE(build for k3s) when $SEALOS(sealos<=4.3.3)"
-  exit
-fi
-readonly kube_major="${KUBE%.*}"
-readonly sealos_major="${SEALOS%%-*}"
-if [[ "${kube_major//./}" -ge 126 ]]; then
-  if ! [[ "${sealos_major//./}" -le 413 ]] || [[ -n "$SEALOS_PATCH" ]]; then
-    echo "Verifying the availability of unstable"
-  else
-    echo "INFO::skip kube(>=1.26) building when sealos <= 4.1.3"
-    exit
-  fi
-  FROM_CRI=$(sudo buildah from "$IMAGE_CACHE_NAME:cri-amd64")
-  MOUNT_CRI=$(sudo buildah mount "$FROM_CRI")
-  case $CRI_TYPE in
-  containerd)
-    if ! [[ "$(sudo cat "$MOUNT_CRI"/cri/.versions | grep CONTAINERD | awk -F= '{print $NF}')" =~ v1\.([6-9]|[0-9][0-9])\.[0-9]+ ]]; then
-      echo https://kubernetes.io/blog/2022/11/18/upcoming-changes-in-kubernetes-1-26/#cri-api-removal
-      exit
-    fi
-    ;;
-  docker)
-    if ! [[ "$(sudo cat "$MOUNT_CRI"/cri/.versions | grep CRIDOCKER | awk -F= '{print $NF}')" =~ v0\.[3-9]\.[0-9]+ ]]; then
-      echo https://github.com/Mirantis/cri-dockerd/issues/125
-      exit
-    fi
-    ;;
-  esac
-fi
-
-case $CRI_TYPE in
-containerd | cri-o)
-  if [[ "${SEALOS_XYZ%%.*}" -ge 5 ]] && ! [[ "${KUBE_XY//./}" -ge 124 ]]; then
-    echo "INFO::skip $KUBE(kube<1.24) when $SEALOS(sealos>=5)"
-    exit
-  fi
-  ;;
-docker)
-  if [[ "${SEALOS_XYZ%%.*}" -ge 5 ]] && ! [[ "${KUBE_XY//./}" -ge 126 ]]; then
-    echo "INFO::skip $KUBE(kube<1.26) when $SEALOS(sealos>=5)"
-    exit
-  fi
-  ;;
-esac
 case $CRI_TYPE in
 containerd)
   IMAGE_KUBE=kubernetes
@@ -108,19 +61,21 @@ fi
 
 sudo buildah login -u "$IMAGE_HUB_USERNAME" -p "$IMAGE_HUB_PASSWORD" "$IMAGE_HUB_REGISTRY"
 for IMAGE_NAME in "${IMAGE_PUSH_NAME[@]}"; do
+  manifest_name="mf:${KUBE%+*}-${SEALOS}-${IMAGE_NAME##*:}"
   echo "$IMAGE_TAGS" | sed "s~,~\n~g" | while read -r tag; do
     echo "${IMAGE_NAME%:*}:$tag"
-  done | xargs sudo buildah manifest create --all "mf:${KUBE%+*}-$SEALOS" || exit $ERR_CODE
-  if [[ $(sudo buildah inspect "mf:${KUBE%+*}-$SEALOS" | yq .manifests[].platform.architecture | uniq | grep 64 -c) -eq 2 ]]; then
+  done | xargs sudo buildah manifest create --all "$manifest_name" || exit $ERR_CODE
+  if [[ $(sudo buildah inspect "$manifest_name" | yq .manifests[].platform.architecture | uniq | grep 64 -c) -eq 2 ]]; then
+    sudo buildah manifest push --all "$manifest_name" "docker://$IMAGE_NAME" && echo "$IMAGE_NAME push success"
     if sudo buildah login -u labring -p "$1" docker.io; then
-      IMAGE_NAME="docker.io/labring/${IMAGE_NAME##*/}"
+      docker_image_name="docker.io/labring/${IMAGE_NAME##*/}"
+      sudo buildah manifest push --rm --all "$manifest_name" "docker://$docker_image_name" && echo "$docker_image_name push success"
     else
       echo "warning: Please input REGISTRY_TOKEN for docker.io"
-      continue
+      sudo buildah manifest rm "$manifest_name" >/dev/null 2>&1 || true
     fi
-    sudo buildah manifest push --rm --all "mf:${KUBE%+*}-$SEALOS" "docker://$IMAGE_NAME" && echo "$IMAGE_NAME push success"
   else
-    sudo buildah manifest inspect "mf:${KUBE%+*}-$SEALOS" | yq -CP
+    sudo buildah manifest inspect "$manifest_name" | yq -CP
     echo "ERROR::TARGETARCH for sealos build"
     sudo buildah images
     exit $ERR_CODE

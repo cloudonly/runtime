@@ -80,7 +80,7 @@ while IFS= read -r file; do
       git ls-remote --refs --sort="-version:refname" --tags "https://github.com/k3s-io/k3s.git" | cut -d/ -f3- | grep -E "^$(cut -d. -f-2 ".versions/$K8S_MD.latest").[0-9]+\+k3s[0-9]$" | head -n 1 >".versions/$K8S_MD.cached"
       cp ".versions/$K8S_MD.cached" ".versions/$K8S_MD.latest"
     fi
-    cat ".versions/$K8S_MD.cached"
+    emit_kube_versions ".versions/$K8S_MD.cached" "${kubeMinor:-}"
   )
   [[ -s ".versions/$K8S_MD" ]] || cp ".versions/$K8S_MD.latest" ".versions/$K8S_MD"
   if [[ -z "$(cat ".versions/$K8S_MD")" ]]; then
