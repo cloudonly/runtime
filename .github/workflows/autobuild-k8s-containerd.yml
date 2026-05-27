@@ -16,6 +16,9 @@ on:
         description: 'build all images'
         required: true
         default: false
+permissions:
+  contents: read
+  packages: write
 env:
   part: ${{ github.event.inputs.part }}
   allBuild: ${{ github.event.inputs.allbuild }}
@@ -85,7 +88,7 @@ jobs:
       - name: Auto build image
         env:
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
           arch: ${{ matrix.arch }}
           kubeVersion: ${{ matrix.version }}
         run: .github/scripts/kubernetes.sh
@@ -111,6 +114,6 @@ jobs:
       - name: Manifest Image
         env:
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
           version: ${{ matrix.version }}-${{ env.sealoslatest }}
         run: .github/scripts/manifest.sh ${{ secrets.D_REGISTRY_TOKEN }}
